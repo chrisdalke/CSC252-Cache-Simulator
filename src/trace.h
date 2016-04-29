@@ -14,12 +14,12 @@
 #include <assert.h>
 
 
-void traceOpen();
-void traceReadLine();
+void traceOpen(char *filename);
+char * traceReadLine();
 void traceClose();
 
-void outputOpen();
-void outputReadLine();
+void outputOpen(char *filename);
+void outputWrite(char *text);
 void outputClose();
 
 /////////////////////////////////////////////////////

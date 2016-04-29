@@ -8,8 +8,6 @@
 
 #include "trace.h"
 
-// Put anything for reading trace files / writing output files here.
-
 //Variable declarations
 FILE *traceFile;
 FILE *outputFile;
@@ -28,7 +26,7 @@ void traceOpen(char *filename){
 	inputLine = malloc(MAX_LINE_SIZE);
 }
 
-const char * traceReadLine(){
+char * traceReadLine(){
 	return fgets(inputLine, MAX_LINE_SIZE, traceFile);
 }
 
@@ -48,7 +46,7 @@ void outputOpen(char *filename){
 	outputFile = fopen(filename, "w");
 }
 
-void outputWriteLine(char *text){
+void outputWrite(char *text){
 	fputs(text,outputFile);
 }
 

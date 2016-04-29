@@ -39,6 +39,10 @@ void printHelp(const char * prog) {
 
 int main(int argc, char* argv[])
 {
+    /////////////////////////////////////////////////////
+    // Command line argument parsing
+    /////////////////////////////////////////////////////
+
     //Cache specification variables (defaults)
     //These can be overwritten in the command line.
     uint32_t size = 32; //total size of L1$ (KB)
@@ -133,12 +137,9 @@ int main(int argc, char* argv[])
         }
     }
 
-
     /////////////////////////////////////////////////////
-    // Cache Simulation
+    // Cache Initialization
     /////////////////////////////////////////////////////
-
-    /* TODO: Probably should intitalize the cache */
 
     //Calculate the cache attributes
     uint32_t numSets = (size * 1024) / (line * ways);
@@ -148,26 +149,106 @@ int main(int argc, char* argv[])
 
     //Cache will be stored as arrays
     //Size is based on the total size, ways, etc...
+    //Initialize the Cache
 
-
+    //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
 
     //Print out the parameters we grabbed for the cache
     printf("Ways: %u; Sets: %u; Line Size: %uB\n", ways,numSets,line);
     printf("Tag: %d bits; Index: %d bits; Offset: %d bits\n", numTagBits, numIndexBits, numOffsetBits);
 
-
     /////////////////////////////////////////////////////
-    // Read file input
-    /////////////////////////////////////////////////////
-
-    /* TODO: Now we read the trace file line by line */
-
-
-    /////////////////////////////////////////////////////
-    // Cache Simulation
+    // Output File Initialization
+    // Result files will be stored in the trace folder
     /////////////////////////////////////////////////////
 
-    /* TODO: Now we simulate the cache */  
+    //Name the filename based on the input file
+    //Allocate a string big enough for the appended filename and add extension
+    char * outputFilename = malloc( sizeof(char) * ( strlen(filename) + 16 ) );
+    strcpy(outputFilename,filename);
+    strcat(outputFilename,".simulated");
+
+    //Open the output file stream
+    //We will write to this file later
+    outputOpen(outputFilename);
+
+    //Set up output labels
+    char * cacheHitTag = " hit\n";
+    char * compulsoryMissTag = " compulsory\n";
+    char * capacityMissTag = " capacity\n";
+    char * conflictMissTag = " conflict\n";
+
+    /////////////////////////////////////////////////////
+    // Input File Initialization
+    /////////////////////////////////////////////////////
+
+    //Load the input file
+    traceOpen(filename);
+
+    /////////////////////////////////////////////////////
+    // Cache Simulation Loop
+    /////////////////////////////////////////////////////
+
+    //Temporary utility variables
+    int numReadLines = 0;
+    char * currentOutput;
+    char tempAccessType;
+    char * tempAddress = malloc( sizeof(char) * (12));
+    uint32_t currentAddress;
+    char * statusTag;
+
+    //Read in the file, line by line
+    char * nextLine = traceReadLine();
+    while (nextLine != NULL){
+        numReadLines++;
+
+        //Get the access type
+        tempAccessType = nextLine[0];
+
+        //Get the address of the access by getting character 2 to 10 in the input line
+        strncpy(tempAddress,nextLine + 2,10);
+        //manually add null terminator to end the string
+        tempAddress[10] = '\0'; 
+        //Convert hex address to integer address
+        currentAddress = strtol(tempAddress, NULL, 0);
+
+        //Handle the instruction based on which type it is
+        if (tempAccessType == 'l'){
+            //printf("Load instruction\n");
+
+            //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
+
+            read_xactions++;
+        } else if (tempAccessType == 's'){
+            //printf("Store instruction\n");
+
+            //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
+
+            write_xactions++;
+        } else {
+            printf("Invalid access type! Something has gone wrong.\n");
+        }
+
+        statusTag = cacheHitTag;
+
+        //Initialize output 
+        currentOutput = malloc( sizeof(char) * ( strlen(nextLine) + 16 ) );
+        //Copy original string into output
+        strcpy(currentOutput,nextLine); 
+        //Remove newline from original input string
+        currentOutput[strlen(currentOutput) - 1] = '\0'; 
+        //Add tag to end of output based on what happened this step
+        strcat(currentOutput,statusTag); 
+        //Write output to file
+        outputWrite(currentOutput);
+
+        //Load the next line, if one exists
+        nextLine = traceReadLine();
+    }
+
+    /////////////////////////////////////////////////////
+    // End of Cache Simulation Loop
+    /////////////////////////////////////////////////////
 
     /* Print results */
     printf("Miss Rate: %8lf%%\n", ((double) totalMisses) / ((double) totalMisses + (double) totalHits) * 100.0);
@@ -175,16 +256,14 @@ int main(int argc, char* argv[])
     printf("Write Transactions: %d\n", write_xactions);
 
     /////////////////////////////////////////////////////
-    // Output to result file
-    /////////////////////////////////////////////////////
-
-    /* TODO: Now we output the file */
-
-    /////////////////////////////////////////////////////
     // Cleanup
     /////////////////////////////////////////////////////
 
-    /* TODO: Cleanup */
+    //Close the trace
+    traceClose();
+
+    //Close the output file
+    outputClose();
 
 }
 
