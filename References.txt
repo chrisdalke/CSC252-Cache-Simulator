@@ -1,0 +1,4 @@
+https://www.cs.umd.edu/class/sum2003/cmsc311/Notes/Memory/introCache.html
+https://www.cs.umd.edu/class/sum2003/cmsc311/Notes/Memory/pitfall.html
+https://www.cs.umd.edu/class/sum2003/cmsc311/Notes/Memory/set.html
+https://www.cs.umd.edu/class/sum2003/cmsc311/Notes/Memory/fully.html

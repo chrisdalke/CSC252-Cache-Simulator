@@ -9,6 +9,16 @@
 #include "cache.h"
 #include "trace.h"
 
+//Define constants
+//Hit/miss constants
+#define HIT_SUCCESS 0
+#define CONFLICT_MISS 1
+#define COMPULSORY_MISS 2
+#define CAPACITY_MISS 3
+//Replacement policies
+#define FIFO 0
+#define LRU 1
+
 int write_xactions = 0;
 int read_xactions = 0;
 
@@ -48,6 +58,7 @@ int main(int argc, char* argv[])
     uint32_t size = 32; //total size of L1$ (KB)
     uint32_t ways = 1; //# of ways in L1. Default to direct-mapped
     uint32_t line = 32; //line size (B)
+    uint32_t replacementPolicy = FIFO; //replacement policy
     int i;
 
     // hit and miss counts
@@ -125,9 +136,8 @@ int main(int argc, char* argv[])
         }
 
         else if (!strcmp(lruString, argv[i])){
-            // Extra Credit: Implement Me!
-            printf("Unrecognized argument. Exiting.\n");
-            return -1;
+            //Use LRU replacement policy
+            replacementPolicy = LRU;
         }
 
         //unrecognized input
@@ -166,14 +176,15 @@ int main(int argc, char* argv[])
     uint32_t tagArray[numSets][ways];
     uint32_t validBit[numSets][ways];
     uint32_t dirtyBit[numSets][ways];
+    uint32_t evictionTable[numSets][ways];
 
     //initialize the arrays to default values
-    for (int currentSet = 0; currentSet < numSet; currentSet++){
+    for (int currentSet = 0; currentSet < numSets; currentSet++){
         for (int currentWay = 0; currentWay < ways; currentWay++){
-            dataArray[currentSet][currentWay] = 0;
             tagArray[currentSet][currentWay] = 0;
             validBit[currentSet][currentWay] = 0;
             dirtyBit[currentSet][currentWay] = 0;
+            evictionTable[currentSet][currentWay] = 0;
         }
     }
 
@@ -227,6 +238,10 @@ int main(int argc, char* argv[])
     while (nextLine != NULL){
         numReadLines++;
 
+        /////////////////////////////////////////////////////
+        // Instruction Data Parsing / Setup
+        /////////////////////////////////////////////////////
+
         //Get the access type
         tempAccessType = nextLine[0];
 
@@ -245,81 +260,129 @@ int main(int argc, char* argv[])
         //Convert this to the set number / slot number
         uint32_t slotId = indexBits;
 
-        //printf("test index:%d\n",indexBits);
-        //printf("test tag:%d\n",tagBits);
-        //printf("test offset:%d\n",offsetBits);
+        //Store result cache location after we find the slot we would like to use
+        uint32_t selectedWay;
 
-        //Handle the instruction based on which type it is
-        if (tempAccessType == 'l'){
-            //printf("Load instruction\n");
+        //Based on the index bits, get the row of the cache that we are looking at
+        //loop through all of the sets in this index
+        uint32_t hitStatus = COMPULSORY_MISS;
 
-            //Based on the index bits, get the row of the cache that we are looking at
-            //loop through all of the sets in this index
-            uint32_t hasValidEntry = 0;
-            uint32_t validEntryCurrent = 0;
-            for (int currentWay = 0; currentWay < ways; currentWay++){
-                if (validBit[indexBits][currentWay] == 1){
-                    hasValidEntry = 1;
-                    validEntryCurrent = currentWay;
-                }
-            }
+        /////////////////////////////////////////////////////
+        // Cache Search
+        /////////////////////////////////////////////////////
 
-            if (hasValidEntry == 1){
-                //Check if the tags match
-                if (tagArray[indexBits][validEntryCurrent] == tagBits){
-                    //This was a cache hit
-                    //If we had actual data, we would grab it here
-                    //----- mark this as a cache hit
-
-                    statusTag = cacheHitTag;
-                    totalHits++;
+        for (int currentWay = 0; currentWay < ways; currentWay++){
+            if (validBit[indexBits][currentWay] == 1){
+                if (tagArray[indexBits][currentWay] == tagBits){
+                    //Mark this as a successful hit
+                    hitStatus = HIT_SUCCESS;
+                    selectedWay = currentWay;
+                    break;
                 } else {
                     //Tags don't match, must be a conflict miss
-                    statusTag = conflictMissTag;
-                    totalMisses++;
-                    hasValidEntry = 0;
+                    hitStatus = CONFLICT_MISS;
                 }
-            } else {
-                //If the cache missed, record the miss
-                totalMisses++;
-                statusTag = compulsoryMissTag;
-                hasValidEntry = 0;
-
             }
-
-            if (hasValidEntry == 0){
-
-                //Load up the data that we want
-
-                //Choose which item to evict from the current index
-                //We will choose this based on our replacement policy
-
-                //Either FIFO or LRU replacement policy
-                // (Least recently used)
-                // The LRU emulation will keep track of an 'age' variable
-                // For every single set and cache slot
-
-
-            }
-
-
-
-
-
-
-            read_xactions++;
-        } else if (tempAccessType == 's'){
-            //printf("Store instruction\n");
-
-            //If the dirty bit is true, we should store the data
-
-
-
-            write_xactions++;
-        } else {
-            printf("Invalid access type! Something has gone wrong.\n");
         }
 
+        /////////////////////////////////////////////////////
+        // Hit Handling
+        /////////////////////////////////////////////////////
+
+        //Based on the hit/miss status, perform whatever action we need to do
+        if (hitStatus == HIT_SUCCESS){
+            //Record the hit
+            totalHits++;
+            //Display the hit
+            statusTag = cacheHitTag;
+
+            //If our replacement policy is LRU
+            //We need to record that we have accessed this cache
+            if (replacementPolicy == LRU){
+                evictionTable[indexBits][selectedWay] = numReadLines; //Use line number as age
+            }
+        } 
+
+        /////////////////////////////////////////////////////
+        // Miss Handling
+        /////////////////////////////////////////////////////
+
+        else if (hitStatus == COMPULSORY_MISS | hitStatus == CONFLICT_MISS | hitStatus == CAPACITY_MISS){
+            //Record the miss
+            totalMisses++;
+
+            //Display the miss status
+            switch (hitStatus){
+                case COMPULSORY_MISS: {
+                    statusTag = compulsoryMissTag;
+                    break;
+                }
+                case CONFLICT_MISS: {
+                    statusTag = conflictMissTag;
+                    break;
+                }
+                case CAPACITY_MISS: {
+                    statusTag = capacityMissTag;
+                    break;
+                }
+            }
+
+            /////////////////////////////////////////////////////
+            // Replacement Policy Way Selection
+            /////////////////////////////////////////////////////
+            //Choose which item to evict from the current index
+            //We will choose this based on our replacement policy
+            // -FIFO (First In First Out), choose item with lowest age
+            // -LRU (Least Recently Used), choose item with lowest age, update age based on usage
+
+            uint32_t lowestAge = numReadLines + 1; //start with current age+1 as lowest age
+            //Find the lowest age in the table at the current index
+            for (int currentWay = 0; currentWay < ways; currentWay++){
+                if (evictionTable[indexBits][currentWay] < lowestAge){
+                    lowestAge = evictionTable[indexBits][currentWay];
+                    selectedWay = currentWay;
+                }
+            }
+
+            /////////////////////////////////////////////////////
+            // Writeback
+            /////////////////////////////////////////////////////
+
+            if (dirtyBit[indexBits][selectedWay] == 1){
+                //When we evict an old item, if the dirty bit has been set, write it to memory
+                //increment write_xactions to represent this
+                write_xactions++;
+            }
+
+            /////////////////////////////////////////////////////
+            // Cache Item Update
+            /////////////////////////////////////////////////////
+
+            //update new cache items
+            tagArray[indexBits][selectedWay] = tagBits;
+            validBit[indexBits][selectedWay] = 1;
+            dirtyBit[indexBits][selectedWay] = 0;
+
+            //update eviction table data for our replacement policy
+            evictionTable[indexBits][selectedWay] = numReadLines; //use the line number as an age
+
+            //Increment 'read from memory' counter
+            read_xactions++;
+        }
+
+        /////////////////////////////////////////////////////
+        // Store Instruction Dirty Bit Handling
+        /////////////////////////////////////////////////////
+
+        //Handle store instruction
+        if (tempAccessType == 's'){
+            //Set the dirty bit to true for the data we have written to
+            dirtyBit[indexBits][selectedWay] = 1;
+        }
+
+        /////////////////////////////////////////////////////
+        // Output
+        /////////////////////////////////////////////////////
 
         //Initialize output string
         currentOutput = malloc( sizeof(char) * ( strlen(nextLine) + 16 ) );
