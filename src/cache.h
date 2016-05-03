@@ -18,6 +18,7 @@ extern int read_xactions;
 
 void printHelp(const char * prog);
 uint32_t logBaseTwo(uint32_t num);
+uint32_t extractBitSequence(uint32_t in, int start, int offset);
 
 /////////////////////////////////////////////////////
 // End of file

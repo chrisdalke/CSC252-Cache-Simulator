@@ -151,7 +151,31 @@ int main(int argc, char* argv[])
     //Size is based on the total size, ways, etc...
     //Initialize the Cache
 
-    //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
+    //Possibly store the cache data in a 2d array of bytes? or do we even need to store the actual cache since its a simulation?
+    //Maybe we just store the index/tag arrays
+
+    //"SETS" == "SLOTS"
+    //A full cache address is made up of (Tag Bits & Offset Bits)
+
+    //Index stores a fast way to connect with the slot in the cache
+    //aka an index to the slot line
+
+    //Setup tag array
+    //Setup valid bit array
+    //Setup dirty bit array
+    uint32_t tagArray[numSets][ways];
+    uint32_t validBit[numSets][ways];
+    uint32_t dirtyBit[numSets][ways];
+
+    //initialize the arrays to default values
+    for (int currentSet = 0; currentSet < numSet; currentSet++){
+        for (int currentWay = 0; currentWay < ways; currentWay++){
+            dataArray[currentSet][currentWay] = 0;
+            tagArray[currentSet][currentWay] = 0;
+            validBit[currentSet][currentWay] = 0;
+            dirtyBit[currentSet][currentWay] = 0;
+        }
+    }
 
     //Print out the parameters we grabbed for the cache
     printf("Ways: %u; Sets: %u; Line Size: %uB\n", ways,numSets,line);
@@ -177,6 +201,7 @@ int main(int argc, char* argv[])
     char * compulsoryMissTag = " compulsory\n";
     char * capacityMissTag = " capacity\n";
     char * conflictMissTag = " conflict\n";
+    char * defaultMissTag = " miss\n";
 
     /////////////////////////////////////////////////////
     // Input File Initialization
@@ -212,26 +237,91 @@ int main(int argc, char* argv[])
         //Convert hex address to integer address
         currentAddress = strtol(tempAddress, NULL, 0);
 
+        //Get the index, tag, and offset bits
+        uint32_t tagBits = extractBitSequence(currentAddress,32-numTagBits,numTagBits);
+        uint32_t indexBits = extractBitSequence(currentAddress,numOffsetBits,numIndexBits);
+        uint32_t offsetBits = extractBitSequence(currentAddress,0,numOffsetBits);
+
+        //Convert this to the set number / slot number
+        uint32_t slotId = indexBits;
+
+        //printf("test index:%d\n",indexBits);
+        //printf("test tag:%d\n",tagBits);
+        //printf("test offset:%d\n",offsetBits);
+
         //Handle the instruction based on which type it is
         if (tempAccessType == 'l'){
             //printf("Load instruction\n");
 
-            //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
+            //Based on the index bits, get the row of the cache that we are looking at
+            //loop through all of the sets in this index
+            uint32_t hasValidEntry = 0;
+            uint32_t validEntryCurrent = 0;
+            for (int currentWay = 0; currentWay < ways; currentWay++){
+                if (validBit[indexBits][currentWay] == 1){
+                    hasValidEntry = 1;
+                    validEntryCurrent = currentWay;
+                }
+            }
+
+            if (hasValidEntry == 1){
+                //Check if the tags match
+                if (tagArray[indexBits][validEntryCurrent] == tagBits){
+                    //This was a cache hit
+                    //If we had actual data, we would grab it here
+                    //----- mark this as a cache hit
+
+                    statusTag = cacheHitTag;
+                    totalHits++;
+                } else {
+                    //Tags don't match, must be a conflict miss
+                    statusTag = conflictMissTag;
+                    totalMisses++;
+                    hasValidEntry = 0;
+                }
+            } else {
+                //If the cache missed, record the miss
+                totalMisses++;
+                statusTag = compulsoryMissTag;
+                hasValidEntry = 0;
+
+            }
+
+            if (hasValidEntry == 0){
+
+                //Load up the data that we want
+
+                //Choose which item to evict from the current index
+                //We will choose this based on our replacement policy
+
+                //Either FIFO or LRU replacement policy
+                // (Least recently used)
+                // The LRU emulation will keep track of an 'age' variable
+                // For every single set and cache slot
+
+
+            }
+
+
+
+
+
 
             read_xactions++;
         } else if (tempAccessType == 's'){
             //printf("Store instruction\n");
 
-            //TODO TODO TODO TODO TODO TODO TODO TODO TODO 
+            //If the dirty bit is true, we should store the data
+
+
 
             write_xactions++;
         } else {
             printf("Invalid access type! Something has gone wrong.\n");
         }
 
-        statusTag = cacheHitTag;
 
-        //Initialize output 
+        //Initialize output string
         currentOutput = malloc( sizeof(char) * ( strlen(nextLine) + 16 ) );
         //Copy original string into output
         strcpy(currentOutput,nextLine); 
@@ -278,6 +368,11 @@ uint32_t logBaseTwo(uint32_t num){
         r++;
     }
     return r;
+}
+
+//Extracts a sequence of bits from a number
+uint32_t extractBitSequence(uint32_t in, int start, int offset) {
+   return (in >> start) & ((1 << offset)-1);
 }
 
 /////////////////////////////////////////////////////
