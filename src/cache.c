@@ -15,6 +15,7 @@
 #define CONFLICT_MISS 1
 #define COMPULSORY_MISS 2
 #define CAPACITY_MISS 3
+#define UNKNOWN_MISS 4
 //Replacement policies
 #define FIFO 0
 #define LRU 1
@@ -82,6 +83,10 @@ int main(int argc, char* argv[])
         return 1;
     }
 
+    //Debug: display all arguments
+    //for (i = 0; i < argc; i++)
+    //    printf("\n%s", argv[i]);
+
     //parse command line
     for(i = 1; i < argc; i++){
 
@@ -148,7 +153,7 @@ int main(int argc, char* argv[])
     }
 
     /////////////////////////////////////////////////////
-    // Cache Initialization
+    // Main Cache Initialization
     /////////////////////////////////////////////////////
 
     //Calculate the cache attributes
@@ -157,19 +162,6 @@ int main(int argc, char* argv[])
     uint32_t numOffsetBits = logBaseTwo(line);
     uint32_t numTagBits = (32) - (numIndexBits + numOffsetBits);
 
-    //Cache will be stored as arrays
-    //Size is based on the total size, ways, etc...
-    //Initialize the Cache
-
-    //Possibly store the cache data in a 2d array of bytes? or do we even need to store the actual cache since its a simulation?
-    //Maybe we just store the index/tag arrays
-
-    //"SETS" == "SLOTS"
-    //A full cache address is made up of (Tag Bits & Offset Bits)
-
-    //Index stores a fast way to connect with the slot in the cache
-    //aka an index to the slot line
-
     //Setup tag array
     //Setup valid bit array
     //Setup dirty bit array
@@ -177,6 +169,14 @@ int main(int argc, char* argv[])
     uint32_t validBit[numSets][ways];
     uint32_t dirtyBit[numSets][ways];
     uint32_t evictionTable[numSets][ways];
+
+    //Initialize compulsory flag array
+    uint32_t compulsoryFlagsNum = ((int)pow(2,numTagBits + numIndexBits)) / 32;
+    uint32_t *compulsoryFlags;
+    compulsoryFlags = (uint32_t *)malloc(sizeof(uint32_t) * (compulsoryFlagsNum));
+    for (uint32_t i = 0; i < compulsoryFlagsNum; i++){
+        resetBit(compulsoryFlags,i);
+    }
 
     //initialize the arrays to default values
     for (int currentSet = 0; currentSet < numSets; currentSet++){
@@ -187,6 +187,37 @@ int main(int argc, char* argv[])
             evictionTable[currentSet][currentWay] = 0;
         }
     }
+
+    /////////////////////////////////////////////////////
+    // Fully-Associative Cache Initialization
+    /////////////////////////////////////////////////////
+
+    //Initialize fully associative cache simulation
+    //We use this to detect conflict vs capacity misses
+    uint32_t fullyAssocNumWays = (size * 1024) / (line); //figure out the number of ways we need such that numSets = 1;
+    uint32_t fullyAssocNumSets = (size * 1024) / (line * fullyAssocNumWays); //This should be equal to one
+    assert(fullyAssocNumSets == 1);
+    uint32_t fullyAssocNumIndexBits = logBaseTwo(fullyAssocNumSets);
+    uint32_t fullyAssocNumOffsetBits = logBaseTwo(line);
+    uint32_t fullyAssocNumTagBits = (32) - (fullyAssocNumIndexBits + fullyAssocNumOffsetBits);
+
+    //Initialize fully associative arrays
+    uint32_t fullyAssocTagArray[fullyAssocNumWays];
+    uint32_t fullyAssocValidBit[fullyAssocNumWays];
+    uint32_t fullyAssocDirtyBit[fullyAssocNumWays];
+    uint32_t fullyAssocEvictionTable[fullyAssocNumWays];
+
+    //Initialize fully associative arrays to default values
+    for (int fullyAssocCurrentWay = 0; fullyAssocCurrentWay < fullyAssocNumWays; fullyAssocCurrentWay++){
+        fullyAssocTagArray[fullyAssocCurrentWay] = 0;
+        fullyAssocValidBit[fullyAssocCurrentWay] = 0;
+        fullyAssocDirtyBit[fullyAssocCurrentWay] = 0;
+        fullyAssocEvictionTable[fullyAssocCurrentWay] = 0;
+    }
+
+    /////////////////////////////////////////////////////
+    // Program Output
+    /////////////////////////////////////////////////////
 
     //Print out the parameters we grabbed for the cache
     printf("Ways: %u; Sets: %u; Line Size: %uB\n", ways,numSets,line);
@@ -212,7 +243,6 @@ int main(int argc, char* argv[])
     char * compulsoryMissTag = " compulsory\n";
     char * capacityMissTag = " capacity\n";
     char * conflictMissTag = " conflict\n";
-    char * defaultMissTag = " miss\n";
 
     /////////////////////////////////////////////////////
     // Input File Initialization
@@ -257,20 +287,24 @@ int main(int argc, char* argv[])
         uint32_t indexBits = extractBitSequence(currentAddress,numOffsetBits,numIndexBits);
         uint32_t offsetBits = extractBitSequence(currentAddress,0,numOffsetBits);
 
+        //Get the address (index + tag bits) and cut off the offset bits
+        //Since offset bits are within a data block, we just need to see if the block has loaded
+        uint32_t currentDataBlock = extractBitSequence(currentAddress,numOffsetBits,32-numOffsetBits);
+
         //Convert this to the set number / slot number
         uint32_t slotId = indexBits;
 
         //Store result cache location after we find the slot we would like to use
         uint32_t selectedWay;
 
-        //Based on the index bits, get the row of the cache that we are looking at
-        //loop through all of the sets in this index
-        uint32_t hitStatus = COMPULSORY_MISS;
+        //Store Hit / miss status
+        uint32_t hitStatus = UNKNOWN_MISS;
 
         /////////////////////////////////////////////////////
         // Cache Search
         /////////////////////////////////////////////////////
 
+        //Loop through the cache and search for a valid entry
         for (int currentWay = 0; currentWay < ways; currentWay++){
             if (validBit[indexBits][currentWay] == 1){
                 if (tagArray[indexBits][currentWay] == tagBits){
@@ -279,11 +313,69 @@ int main(int argc, char* argv[])
                     selectedWay = currentWay;
                     break;
                 } else {
-                    //Tags don't match, must be a conflict miss
-                    hitStatus = CONFLICT_MISS;
+                    //This might be a miss, but no idea what type of miss it is yet.
+                    //We will determine it later
+                    hitStatus = UNKNOWN_MISS;
                 }
             }
         }
+
+
+        /////////////////////////////////////////////////////
+        // Fully Associative Cache Simulation
+        /////////////////////////////////////////////////////
+        //Check if the fully associative cache had a hit or miss
+        //If it had a miss, quickly add the values to the fully-associative table
+        //If it had a hit, update the fully associative eviction table
+        // We do all the fully associative simulation in this section
+
+        //START FULLY ASSOCIATIVE SIMULATION
+
+        uint32_t fullyAssocHitStatus = UNKNOWN_MISS;
+        uint32_t fullyAssocSelectedWay = 0;
+
+        for (int fullyAssocCurrentWay = 0; fullyAssocCurrentWay < fullyAssocNumWays; fullyAssocCurrentWay++){
+            if (fullyAssocValidBit[fullyAssocCurrentWay] == 1){
+                if (fullyAssocTagArray[fullyAssocCurrentWay] == currentDataBlock){
+                    fullyAssocHitStatus = HIT_SUCCESS;
+                    fullyAssocSelectedWay = fullyAssocCurrentWay;
+                    break;
+                } else {
+                    fullyAssocHitStatus = UNKNOWN_MISS;
+                }
+            }
+        }
+
+        if (fullyAssocHitStatus == HIT_SUCCESS){
+
+            //Update eviction table for this item
+            if (replacementPolicy == LRU){
+                fullyAssocEvictionTable[fullyAssocSelectedWay] = numReadLines; //Use line number as age
+            }
+
+        } else {
+
+            //Determine which item to evict
+            uint32_t lowestAge = numReadLines + 1; //start with current age+1 as lowest age
+
+            for (int fullyAssocCurrentWay = 0; fullyAssocCurrentWay < fullyAssocNumWays; fullyAssocCurrentWay++){
+                if (fullyAssocEvictionTable[fullyAssocCurrentWay] < lowestAge){
+                    lowestAge = fullyAssocEvictionTable[fullyAssocCurrentWay];
+                    fullyAssocSelectedWay = fullyAssocCurrentWay;
+                }
+            }
+
+            //Evict the item, and update the table
+            fullyAssocTagArray[fullyAssocSelectedWay] = currentDataBlock;
+            fullyAssocValidBit[fullyAssocSelectedWay] = 1;
+            fullyAssocDirtyBit[fullyAssocSelectedWay] = 0;
+
+            //update eviction table data for our replacement policy
+            fullyAssocEvictionTable[fullyAssocSelectedWay] = numReadLines; //use the line number as an age
+
+        }
+
+        //END FULLY ASSOCIATIVE SIMULATION
 
         /////////////////////////////////////////////////////
         // Hit Handling
@@ -307,25 +399,9 @@ int main(int argc, char* argv[])
         // Miss Handling
         /////////////////////////////////////////////////////
 
-        else if (hitStatus == COMPULSORY_MISS | hitStatus == CONFLICT_MISS | hitStatus == CAPACITY_MISS){
+        else if (hitStatus == UNKNOWN_MISS){
             //Record the miss
             totalMisses++;
-
-            //Display the miss status
-            switch (hitStatus){
-                case COMPULSORY_MISS: {
-                    statusTag = compulsoryMissTag;
-                    break;
-                }
-                case CONFLICT_MISS: {
-                    statusTag = conflictMissTag;
-                    break;
-                }
-                case CAPACITY_MISS: {
-                    statusTag = capacityMissTag;
-                    break;
-                }
-            }
 
             /////////////////////////////////////////////////////
             // Replacement Policy Way Selection
@@ -341,6 +417,55 @@ int main(int argc, char* argv[])
                 if (evictionTable[indexBits][currentWay] < lowestAge){
                     lowestAge = evictionTable[indexBits][currentWay];
                     selectedWay = currentWay;
+                }
+            }
+
+            /////////////////////////////////////////////////////
+            // Miss Type Identification
+            /////////////////////////////////////////////////////
+            //Identify which type of miss occurred
+            //It will be one of the following:
+            //COMPULSORY_MISS: The data address has never been accessed before
+            //CONFLICT_MISS: There was a miss AND the cache is not completely full
+            //CAPACITY_MISS: There was a miss AND the cache is completely full
+
+            //Compulsory miss occurs if a certain address has never been put into memory
+            //I record this by keeping track of a single 0/1 bit for every single memory address value
+            //I set the bit to 1 if it has been read already, 0 if it has never been read
+            if (getBit(compulsoryFlags,currentDataBlock) == 0){
+
+                //Record the compulsory miss
+                hitStatus = COMPULSORY_MISS;
+
+            } else {
+                //If we didn't have a compulsory miss, we could have conflict or capacity miss
+                //Let's check the status of the miss in the fully associative table
+                //If the fully associative table had a HIT, this means this was a conflict miss.
+                //If the fully associative table had a MISS, this was a capacity miss.
+                if (fullyAssocHitStatus == HIT_SUCCESS){
+                    hitStatus = CONFLICT_MISS;
+                } else {
+                    hitStatus = CAPACITY_MISS;
+                }
+
+            }
+
+            //Debug: Make sure we have chosen a miss type
+            assert(hitStatus != UNKNOWN_MISS);
+
+            //Display the miss status
+            switch (hitStatus){
+                case COMPULSORY_MISS: {
+                    statusTag = compulsoryMissTag;
+                    break;
+                }
+                case CONFLICT_MISS: {
+                    statusTag = conflictMissTag;
+                    break;
+                }
+                case CAPACITY_MISS: {
+                    statusTag = capacityMissTag;
+                    break;
                 }
             }
 
@@ -365,6 +490,9 @@ int main(int argc, char* argv[])
 
             //update eviction table data for our replacement policy
             evictionTable[indexBits][selectedWay] = numReadLines; //use the line number as an age
+
+            //Update compulsory flag table
+            setBit(compulsoryFlags,currentDataBlock);
 
             //Increment 'read from memory' counter
             read_xactions++;
@@ -438,6 +566,20 @@ uint32_t extractBitSequence(uint32_t in, int start, int offset) {
    return (in >> start) & ((1 << offset)-1);
 }
 
+//Sets a bit in a bit array
+void setBit(uint32_t A[],  uint32_t index){
+    A[index/32] |= 1 << (index%32);
+}
+
+//Resets a bit in a bit array
+void resetBit(uint32_t A[],  uint32_t index){
+    A[index/32] &= ~(1 << (index%32));
+}
+
+//Gets a bit in a bit array
+uint32_t getBit(uint32_t A[], uint32_t index){
+    return ((A[index/32] & (1 << (index%32) )) != 0);     
+}
 /////////////////////////////////////////////////////
 // End of file
 /////////////////////////////////////////////////////

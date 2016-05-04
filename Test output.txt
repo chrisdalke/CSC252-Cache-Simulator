@@ -1,0 +1,46 @@
+To help with my project, I built a test application that tests all of the cases:
+
+==================================
+CSC 252 Final Project
+Running Test Cases
+==================================
+Testing twolf_s32_w2_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing twolf_s16_w1_l32... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing swim_s32_w2_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing swim_s16_w1_l32... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing mcf_s32_w2_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing mcf_s16_w1_l32... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gzip_s32_w2_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gzip_s16_w1_l32... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gcc_s32_w512_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gcc_s32_w8_l128_LRU... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gcc_s32_w2_l64... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+Testing gcc_s16_w1_l32... PASSED
+   » Hit/Miss statistics: PASSED
+   » Simulation output: PASSED
+==================================
+Test Summary:
+12 Passed / 0 Failed / 12 Total
+==================================
